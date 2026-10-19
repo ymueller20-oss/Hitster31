@@ -189,6 +189,7 @@ function toTrack(t, excludeCompilations) {
     artists: (t.artists || []).map((a) => a.name),
     year,
     cover: t.album?.images?.[0]?.url || '',
+    isrc: t.external_ids?.isrc || '',
   };
 }
 

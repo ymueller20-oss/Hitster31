@@ -188,3 +188,29 @@ test('Fuzzy-Vergleich ist tolerant', () => {
   assert.ok(!isGuessCorrect({ title: 'Yesterday', artist: 'Queen' }, { title: 'Bohemian Rhapsody', artists: ['Queen'] }));
   assert.ok(!isGuessCorrect({ title: 'Bohemian Rhapsody', artist: '' }, { title: 'Bohemian Rhapsody', artists: ['Queen'] }));
 });
+
+test('Ton-Modus: Spotify-URI nur für Spieler im Spotify-Modus, Hörprobe-Link wenn bereit', () => {
+  const { g, players } = setup(3);
+  const [host, a, b] = players;
+  g.setAudioMode(b.id, 'spotify');
+  g.setAudioMode(a.id, 'off');
+  assert.throws(() => g.setAudioMode(a.id, 'laut'), GameError);
+  assert.ok('playUri' in g.viewFor(host.id));
+  assert.ok('playUri' in g.viewFor(b.id));
+  assert.ok(!('playUri' in g.viewFor(a.id)));
+  assert.equal(g.viewFor(a.id).round.audioUrl, null);
+  g.round.audio = 'ready';
+  assert.equal(g.viewFor(a.id).round.audioUrl, `/audio/TEST/${g.round.id}`);
+});
+
+test('Ohne Hörprobe wird ein anderer Song für denselben Spieler gezogen', () => {
+  const { g } = setup(2);
+  const { id, playerId } = g.round;
+  const left = g.deck.length;
+  assert.equal(g.replaceCard('falsch'), false);
+  assert.equal(g.replaceCard(id), true);
+  assert.notEqual(g.round.id, id);
+  assert.equal(g.round.playerId, playerId);
+  assert.equal(g.round.audioMisses, 1);
+  assert.equal(g.deck.length, left - 1);
+});

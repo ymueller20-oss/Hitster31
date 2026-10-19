@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS = {
   buyCost: 3,
 };
 
+export const AUDIO_MODES = ['spotify', 'preview', 'off'];
+
 export class GameError extends Error {}
 
 const fail = (msg) => {
@@ -56,6 +58,7 @@ function sanitizeTrack(t) {
     artist: artists.join(', '),
     year,
     cover: str(t.cover, 500).startsWith('https://') ? str(t.cover, 500) : '',
+    isrc: /^[A-Z0-9]{12}$/i.test(str(t.isrc, 20)) ? str(t.isrc, 20) : '',
   };
 }
 
@@ -92,6 +95,8 @@ export class Game {
       tokens: this.settings.startTokens,
       timeline: [],
       connected: true,
+      // Der Host spielt standardmäßig über Spotify, alle anderen hören die Hörprobe.
+      audioMode: this.players.size === 0 ? 'spotify' : 'preview',
     };
     this.players.set(p.id, p);
     this.order.push(p.id);
@@ -139,6 +144,25 @@ export class Game {
     if (!p) return;
     p.connected = connected;
     if (this.phase === 'challenge') this.maybeFinishChallenge();
+  }
+
+  setAudioMode(id, mode) {
+    if (!AUDIO_MODES.includes(mode)) fail('Unbekannter Ton-Modus.');
+    this.player(id).audioMode = mode;
+  }
+
+  // Braucht gerade jemand eine Hörprobe?
+  needsPreview() {
+    return [...this.players.values()].some((p) => p.connected && p.audioMode === 'preview');
+  }
+
+  // Für den aktuellen Song gibt es keine Hörprobe -> anderen Song ziehen (gleicher Spieler).
+  replaceCard(roundId) {
+    if (this.phase !== 'placing' || this.round?.id !== roundId) return false;
+    const misses = (this.round.audioMisses || 0) + 1;
+    this.startRound();
+    if (this.round) this.round.audioMisses = misses;
+    return true;
   }
 
   touch() {
@@ -232,6 +256,8 @@ export class Game {
       passes: [],
       deadline: null,
       result: null,
+      audio: null, // null | 'loading' | 'ready' | 'missing'
+      audioMisses: 0,
     };
   }
 
@@ -401,7 +427,14 @@ export class Game {
       winnerIds: this.winnerIds,
       players: this.order.map((pid) => {
         const p = this.players.get(pid);
-        return { id: p.id, name: p.name, tokens: p.tokens, connected: p.connected, timeline: p.timeline.map(publicCard) };
+        return {
+          id: p.id,
+          name: p.name,
+          tokens: p.tokens,
+          connected: p.connected,
+          audioMode: p.audioMode,
+          timeline: p.timeline.map(publicCard),
+        };
       }),
       round: r && {
         id: r.id,
@@ -413,10 +446,12 @@ export class Game {
         card: revealed ? publicCard(r.card) : null,
         guess: revealed || id === r.playerId ? r.guess : null,
         result: r.result,
+        audio: r.audio,
+        audioUrl: r.audio === 'ready' ? `/audio/${this.code}/${r.id}` : null,
       },
     };
-    // Nur der Host bekommt die Spotify-URI zum Abspielen – ohne Titel/Jahr.
-    if (id === this.hostId && r) view.playUri = r.card.uri;
+    // Die Spotify-URI bekommt nur, wer über sein eigenes Spotify hört – ohne Titel/Jahr.
+    if (r && this.players.get(id)?.audioMode === 'spotify') view.playUri = r.card.uri;
     return view;
   }
 }

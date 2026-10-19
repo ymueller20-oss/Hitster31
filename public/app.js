@@ -51,7 +51,27 @@ const S = {
     playing: false,
     poolNote: '',
   },
+  audio: {
+    pref: LS.get('hit31.audioMode'), // gewählter Ton-Modus, wird nach dem Beitreten an den Server geschickt
+    src: null,
+    playing: false,
+    blocked: false,
+  },
 };
+
+// Ein einziges Audio-Element außerhalb von #app, damit es das Neu-Rendern überlebt.
+const audioEl = new Audio();
+audioEl.loop = true;
+audioEl.preload = 'auto';
+audioEl.addEventListener('playing', () => {
+  S.audio.playing = true;
+  S.audio.blocked = false;
+  render();
+});
+audioEl.addEventListener('pause', () => {
+  S.audio.playing = false;
+  render();
+});
 if (params.has('join')) history.replaceState(null, '', '/');
 
 const $app = document.getElementById('app');
@@ -109,6 +129,7 @@ function onMessage(msg) {
       S.session = { code: msg.code, playerId: msg.playerId, secret: msg.secret };
       LS.set('hit31.session', S.session);
       S.busy = '';
+      if (S.audio.pref) send({ type: 'audio', mode: S.audio.pref });
       break;
     case 'resumeFailed':
       S.session = null;
@@ -119,6 +140,7 @@ function onMessage(msg) {
       S.session = null;
       S.game = null;
       LS.set('hit31.session', null);
+      stopPreview();
       if (msg.reason) showToast(msg.reason);
       break;
     case 'error':
@@ -145,10 +167,11 @@ function onState(g) {
   }
   if (prev?.phase !== 'challenge' && g.phase === 'challenge' && g.round.playerId !== g.you) buzz(120);
   if (g.phase !== 'lobby') requestWakeLock();
-  if (isHost()) hostAutoplay();
+  syncAudio();
 }
 
 const me = () => S.game?.players.find((p) => p.id === S.game.you);
+const audioMode = () => me()?.audioMode || 'off';
 const isHost = () => S.game && S.game.hostId === S.game.you;
 const playerById = (id) => S.game?.players.find((p) => p.id === id);
 
@@ -206,12 +229,50 @@ async function share() {
 
 // ---------- Host: Spotify ----------
 
-async function hostAutoplay() {
+// Bei jedem neuen Zustand: passend zum eigenen Ton-Modus abspielen oder stoppen.
+function syncAudio() {
   const g = S.game;
-  if (g.phase !== 'placing' || !g.playUri || S.host.lastPlayedRound === g.round.id) return;
-  S.host.lastPlayedRound = g.round.id;
-  await playCurrent();
+  const r = g?.round;
+  const running = g && r && ['placing', 'challenge', 'reveal'].includes(g.phase);
+  const mode = audioMode();
+
+  if (mode === 'preview' && running && r.audioUrl) {
+    if (S.audio.src !== r.audioUrl) {
+      S.audio.src = r.audioUrl;
+      audioEl.src = r.audioUrl;
+      playPreview();
+    }
+  } else if (S.audio.src && !(mode === 'preview' && running && r.audio === 'loading')) {
+    stopPreview();
+  }
+
+  if (mode === 'spotify' && g.phase === 'placing' && g.playUri && S.host.lastPlayedRound !== r.id) {
+    S.host.lastPlayedRound = r.id;
+    playCurrent();
+  }
 }
+
+function playPreview() {
+  if (!S.audio.src) return;
+  audioEl.play().catch(() => {
+    // Browser blockiert Autoplay ohne Antippen -> großen Play-Knopf zeigen.
+    S.audio.blocked = true;
+    render();
+  });
+}
+
+function stopPreview() {
+  S.audio.src = null;
+  S.audio.blocked = false;
+  audioEl.pause();
+  audioEl.removeAttribute('src');
+  audioEl.load();
+}
+
+// Jeder Tipp im Spiel darf eine blockierte Wiedergabe nachholen (iOS/Chrome-Autoplay-Regeln).
+document.addEventListener('click', () => {
+  if (S.audio.src && audioEl.paused && S.audio.blocked) playPreview();
+}, true);
 
 async function playCurrent() {
   const uri = S.game?.playUri;
@@ -465,9 +526,26 @@ const actions = {
     send({ type: 'start' });
   },
   replay() {
-    playCurrent();
+    if (audioMode() === 'preview') {
+      audioEl.currentTime = 0;
+      playPreview();
+    } else playCurrent();
   },
-  pause: pausePlayback,
+  pause() {
+    if (audioMode() === 'preview') audioEl.pause();
+    else pausePlayback();
+  },
+  playPreview,
+  setAudio(el) {
+    const mode = el.dataset.mode;
+    const before = audioMode();
+    S.audio.pref = mode;
+    LS.set('hit31.audioMode', mode);
+    if (before === 'spotify' && mode !== 'spotify' && spotify.isLoggedIn()) pausePlayback();
+    if (mode === 'spotify') S.host.lastPlayedRound = null; // aktuellen Song sofort abspielen
+    send({ type: 'audio', mode });
+    if (mode === 'spotify' && spotify.isLoggedIn() && !S.host.devices) loadDevices();
+  },
   viewPlayer(el) {
     S.ui.viewPlayerId = el.dataset.id === S.ui.viewPlayerId ? null : el.dataset.id;
     render();
@@ -662,7 +740,7 @@ function viewLobby() {
         )
         .join('')}</ul>
     </section>
-    ${isHost() ? viewHostSetup() : `<section class="card center"><div class="eq"><i></i><i></i><i></i><i></i></div><p>Warte, bis der Host das Spiel startet…</p>
+    ${isHost() ? viewHostSetup() : `${viewAudioCard()}<section class="card center"><div class="eq"><i></i><i></i><i></i><i></i></div><p>Warte, bis der Host das Spiel startet…</p>
       <p class="muted small">Ziel: ${g.settings.targetCards} Karten · ${g.poolSize ? g.poolSize + ' Songs bereit' : 'Host wählt Songs aus'}</p></section>`}
     <details class="rules"><summary>Spielregeln</summary>${rulesHtml()}</details>
   </main>`;
@@ -704,11 +782,7 @@ function viewHostSetup() {
       ${g.poolSize ? `<p class="ok">✅ ${g.poolSize} Songs im Stapel</p>` : ''}
       ${h.poolNote ? `<p class="warn small">${esc(h.poolNote)}</p>` : ''}
     </section>
-    <section class="card">
-      <h2>2 · Wo läuft die Musik?</h2>
-      <p class="muted small">Öffne die Spotify-App auf deinem Handy (oder Lautsprecher/TV) und tippe dann auf „Geräte suchen“.</p>
-      ${viewDevices()}
-    </section>
+    ${viewAudioCard('2 · ')}
     <section class="card">
       <h2>3 · Einstellungen</h2>
       <label class="setting">Karten zum Sieg ${select('targetCards', [5, 7, 10, 12, 15], g.settings.targetCards)}</label>
@@ -717,6 +791,32 @@ function viewHostSetup() {
     </section>
     <div class="sticky-bottom"><button class="btn primary wide big" data-action="start" ${canStart ? '' : 'disabled'}>Spiel starten ▶</button></div>
     <p class="center small"><button class="link" data-action="spotifyLogout">Spotify-Konto wechseln</button></p>`;
+}
+
+const AUDIO_OPTIONS = [
+  ['preview', '🎧', 'Hörprobe auf diesem Handy', '30 Sekunden pro Song, ohne Konto – ideal für Online-Spiele'],
+  ['spotify', '🟢', 'Ganzer Song (eigenes Spotify)', 'Braucht Premium und Freischaltung durch den Host'],
+  ['off', '🔇', 'Kein Ton', 'Ich sitze neben jemandem, bei dem die Musik läuft'],
+];
+
+function viewAudioCard(prefix = '') {
+  const mode = audioMode();
+  return `<section class="card">
+    <h2>${prefix}Wie hörst du die Musik?</h2>
+    <div class="devices">${AUDIO_OPTIONS.map(
+      ([m, icon, label, hint]) => `<button class="pl ${mode === m ? 'on' : ''}" data-action="setAudio" data-mode="${m}">
+        <span class="pl-ph">${icon}</span><span class="grow"><span class="pl-name">${label}</span><span class="muted small">${hint}</span></span>
+        <span class="check">${mode === m ? '✓' : ''}</span></button>`,
+    ).join('')}</div>
+    ${
+      mode === 'spotify'
+        ? spotify.isLoggedIn()
+          ? `<p class="muted small">Öffne die Spotify-App auf deinem Handy (oder Box/TV) und tippe auf „Geräte suchen“. Nicht aufs Spotify-Display schauen – da steht der Titel. 😉</p>${viewDevices()}`
+          : `<button class="btn spotify wide" data-action="spotifyLogin">${spotifyIcon()} Mit meinem Spotify verbinden</button>
+             <p class="muted small">Klappt nur, wenn der Host deine Spotify-E-Mail im Spotify-Dashboard unter „User Management“ eingetragen hat.</p>`
+        : ''
+    }
+  </section>`;
 }
 
 function viewDevices() {
@@ -765,7 +865,7 @@ function viewGame() {
     </header>
     ${viewScoreboard()}
     ${g.phase === 'over' ? viewOver() : `
-      ${isHost() ? viewHostBar() : ''}
+      ${viewAudioBar()}
       ${viewStatus(active)}
       ${shown.id !== r?.playerId ? `<button class="btn ghost small back" data-action="viewPlayer" data-id="${shown.id}">← zurück zu ${esc(active?.name)}</button>` : ''}
       ${viewTimeline(shown)}
@@ -793,10 +893,11 @@ function viewPlayersSheet() {
     <button class="btn primary wide" data-action="share">📨 Weitere Freunde einladen</button>
     <ul class="players">${g.players
       .map(
-        (p) => `<li><span class="avatar" style="--h:${hue(p.name)}">${esc(p.name[0].toUpperCase())}</span><span class="grow">${esc(p.name)} ${p.connected ? '' : '<span class="muted small">offline</span>'}</span>
+        (p) => `<li><span class="avatar" style="--h:${hue(p.name)}">${esc(p.name[0].toUpperCase())}</span><span class="grow">${esc(p.name)} <span class="small">${{ preview: '🎧', spotify: '🟢', off: '🔇' }[p.audioMode] || ''}</span> ${p.connected ? '' : '<span class="muted small">offline</span>'}</span>
         ${isHost() && p.id !== g.you ? `<button class="icon-btn" data-action="kick" data-id="${p.id}">✕</button>` : ''}</li>`,
       )
       .join('')}</ul>
+    ${viewAudioCard()}
     ${isHost() && g.phase === 'placing' ? `<button class="btn ghost wide" data-action="forceNext">Aktuellen Zug überspringen</button>` : ''}
     <details class="rules"><summary>Spielregeln</summary>${rulesHtml()}</details>
     <div class="row end"><button class="btn danger" data-action="leave">${isHost() ? 'Spiel beenden' : 'Raum verlassen'}</button>
@@ -804,14 +905,46 @@ function viewPlayersSheet() {
   </div></div>`;
 }
 
-function viewHostBar() {
+function viewAudioBar() {
+  const mode = audioMode();
+  const r = S.game.round;
+  if (mode === 'off') {
+    return `<div class="hostbar"><span class="grow small">🔇 Kein Ton auf diesem Handy</span>
+      <button class="btn ghost small" data-action="togglePlayers">Ändern</button></div>`;
+  }
+  if (mode === 'spotify') return viewSpotifyBar();
+  if (S.audio.blocked && S.audio.src) {
+    return `<button class="btn primary wide big" data-action="playPreview">▶ Tippen zum Abspielen</button>`;
+  }
+  const status =
+    r.audio === 'ready'
+      ? S.audio.playing
+        ? '🎧 Hörprobe läuft'
+        : '🎧 Hörprobe pausiert'
+      : r.audio === 'missing'
+        ? '⚠️ Für diesen Song gibt es keine Hörprobe'
+        : '⏳ Hörprobe lädt…';
+  return `<div class="hostbar ${r.audio === 'missing' ? 'err' : ''}">
+    <span class="grow small">${status}</span>
+    ${r.audio === 'ready' ? `<button class="icon-btn" data-action="replay" aria-label="Von vorn">⏮</button>
+    <button class="icon-btn" data-action="${S.audio.playing ? 'pause' : 'playPreview'}" aria-label="Play/Pause">${S.audio.playing ? '⏸' : '▶'}</button>` : ''}
+    <button class="icon-btn" data-action="togglePlayers" aria-label="Ton-Einstellungen">⚙️</button>
+  </div>`;
+}
+
+function viewSpotifyBar() {
   const h = S.host;
+  if (!spotify.isLoggedIn()) {
+    return `<div class="hostbar err"><span class="grow small">⚠️ Nicht mit Spotify verbunden</span>
+      <button class="btn ghost small" data-action="togglePlayers">Ändern</button></div>`;
+  }
   const dev = h.devices?.find((d) => d.id === h.deviceId);
   return `<div class="hostbar ${h.playError ? 'err' : ''}">
     <span class="grow small">${h.playError ? '⚠️ ' + esc(h.playError) : `🔊 ${esc(dev?.name || 'Spotify')}${h.playing ? ' · läuft' : ''}`}</span>
     <button class="icon-btn" data-action="replay" aria-label="Abspielen">▶</button>
     <button class="icon-btn" data-action="pause" aria-label="Pause">⏸</button>
     ${h.playError ? '<button class="icon-btn" data-action="loadDevices" aria-label="Geräte">🔎</button>' : ''}
+    <button class="icon-btn" data-action="togglePlayers" aria-label="Ton-Einstellungen">⚙️</button>
   </div>
   ${h.playError && h.devices?.length ? `<div class="card">${viewDevices()}</div>` : ''}`;
 }

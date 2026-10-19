@@ -5,6 +5,7 @@ import { extname, join, normalize as normPath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Game, GameError } from './game.js';
+import { loadPreview } from './audio.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -27,6 +28,8 @@ async function serveStatic(req, res) {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ spotifyClientId: process.env.SPOTIFY_CLIENT_ID || '' }));
   }
+  const audio = url.pathname.match(/^\/audio\/([A-Z]{4})\/([0-9a-f-]{36})$/);
+  if (audio) return serveAudio(req, res, audio[1], audio[2]);
   if (url.pathname === '/healthz') {
     res.writeHead(200, { 'content-type': 'text/plain' });
     return res.end('ok');
@@ -55,6 +58,30 @@ async function serveStatic(req, res) {
   }
 }
 
+// Hörprobe der aktuellen Runde ausliefern (mit Range-Support, den iOS für Audio braucht).
+function serveAudio(req, res, code, roundId) {
+  const entry = audioByRoom.get(code);
+  if (!entry || entry.roundId !== roundId) {
+    res.writeHead(404);
+    return res.end();
+  }
+  const { buf } = entry;
+  const headers = { 'content-type': 'audio/mpeg', 'accept-ranges': 'bytes', 'cache-control': 'private, max-age=3600' };
+  const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
+  if (m) {
+    const start = m[1] ? Number(m[1]) : Math.max(0, buf.length - Number(m[2]));
+    const end = m[1] && m[2] ? Math.min(Number(m[2]), buf.length - 1) : buf.length - 1;
+    if (start >= buf.length || start > end) {
+      res.writeHead(416, { 'content-range': `bytes */${buf.length}` });
+      return res.end();
+    }
+    res.writeHead(206, { ...headers, 'content-range': `bytes ${start}-${end}/${buf.length}`, 'content-length': end - start + 1 });
+    return res.end(req.method === 'HEAD' ? undefined : buf.subarray(start, end + 1));
+  }
+  res.writeHead(200, { ...headers, 'content-length': buf.length });
+  res.end(req.method === 'HEAD' ? undefined : buf);
+}
+
 const server = http.createServer((req, res) => {
   serveStatic(req, res).catch(() => {
     res.writeHead(500);
@@ -67,6 +94,7 @@ const server = http.createServer((req, res) => {
 const rooms = new Map(); // code -> Game
 const sockets = new Map(); // code -> Set<ws>
 const timers = new Map(); // code -> { roundId, handle }
+const audioByRoom = new Map(); // code -> { roundId, buf }
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 function newCode() {
@@ -86,6 +114,7 @@ function broadcast(code) {
   const set = sockets.get(code);
   if (!game || !set) return;
   syncTimer(game);
+  ensureAudio(game);
   for (const ws of set) {
     if (ws.playerId && game.players.has(ws.playerId)) send(ws, { type: 'state', state: game.viewFor(ws.playerId) });
   }
@@ -104,6 +133,32 @@ function syncTimer(game) {
     broadcast(game.code);
   }, Math.max(0, game.round.deadline - Date.now()));
   timers.set(game.code, { roundId: want, handle });
+}
+
+const MAX_AUDIO_MISSES = 5;
+
+// Sobald eine neue Runde beginnt: Hörprobe besorgen. Gibt es keine und jemand braucht sie,
+// wird ein anderer Song gezogen.
+function ensureAudio(game) {
+  const r = game.round;
+  if (!r || game.phase !== 'placing' || r.audio) return;
+  r.audio = 'loading';
+  const { code } = game;
+  const roundId = r.id;
+  loadPreview(r.card).then((buf) => {
+    if (rooms.get(code) !== game || game.round?.id !== roundId) return;
+    if (buf) {
+      audioByRoom.set(code, { roundId, buf });
+      r.audio = 'ready';
+    } else {
+      r.audio = 'missing';
+      if (game.needsPreview() && r.audioMisses < MAX_AUDIO_MISSES) game.replaceCard(roundId);
+    }
+    broadcast(code);
+  });
+  // Nächsten Song schon vorladen, damit es ohne Wartezeit weitergeht.
+  const next = game.deck[game.deck.length - 1];
+  if (next) loadPreview(next);
 }
 
 function attach(ws, game, player) {
@@ -139,6 +194,7 @@ function closeRoom(code, reason) {
   timers.delete(code);
   sockets.delete(code);
   rooms.delete(code);
+  audioByRoom.delete(code);
 }
 
 function handle(ws, msg) {
@@ -194,6 +250,7 @@ function handle(ws, msg) {
     case 'lobby': game.backToLobby(id); break;
     case 'slot': game.selectSlot(id, msg.slot); break;
     case 'guess': game.setGuess(id, msg.guess); return; // privat, kein Broadcast nötig
+    case 'audio': game.setAudioMode(id, msg.mode); break;
     case 'lockIn': game.lockIn(id); break;
     case 'skip': game.skipSong(id); break;
     case 'buy': game.buyCard(id); break;

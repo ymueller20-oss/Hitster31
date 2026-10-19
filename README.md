@@ -16,6 +16,18 @@ Die Musik kommt aus deinem Spotify, deine Freunde machen per Code oder Link mit 
    - Mit Tokens: Song überspringen (1 🪙) oder Karte kaufen (3 🪙).
    - Wer zuerst die Ziel-Anzahl Karten hat (Standard 10), gewinnt.
 
+### Online spielen (jeder an einem anderen Ort)
+
+Jeder wählt auf seinem Handy, wie er die Musik hört („Wie hörst du die Musik?“ in der Lobby oder im Menü ⚙️):
+
+| Modus | Was passiert | Voraussetzung |
+| --- | --- | --- |
+| 🎧 **Hörprobe** (Standard für Mitspieler) | 30-Sekunden-Ausschnitt in Dauerschleife, direkt im Browser | nichts – kein Konto |
+| 🟢 **Eigenes Spotify** (Standard für Host) | ganzer Song über das eigene Spotify (Handy, Box, TV) | Spotify Premium + im Spotify-Dashboard unter *User Management* eingetragen (max. 5) |
+| 🔇 **Kein Ton** | still | man sitzt neben jemandem, bei dem die Musik läuft |
+
+Die Hörproben kommen von der öffentlichen Deezer-API und werden über den Hit31-Server ausgeliefert, damit niemand am Link den Titel erkennt. Gibt es zu einem Song keine Hörprobe und braucht jemand eine, wird automatisch ein anderer Song gezogen.
+
 Die App ist eine installierbare Web-App (PWA): im Browser *„Zum Home-Bildschirm hinzufügen“* → startet dann im Vollbild wie eine normale App. Der Bildschirm bleibt während des Spiels an.
 
 ## Voraussetzungen
@@ -62,6 +74,7 @@ Ohne `SPOTIFY_CLIENT_ID` fragt die App beim ersten *Spiel erstellen* nach der Cl
 | HTTP + WebSocket-Räume, Reconnect, Challenge-Timer | `server/index.js` |
 | App-Oberfläche (Vanilla JS, kein Build) | `public/app.js`, `public/styles.css` |
 | Spotify-Login (PKCE), Playlists, Wiedergabe | `public/spotify.js` |
+| 30-s-Hörproben über Deezer | `server/audio.js` |
 
 - Der Server entscheidet über alle Regeln; welcher Song läuft, erfährt nur das Host-Handy (als Spotify-URI zum Abspielen) – die anderen sehen Titel und Jahr erst bei der Auflösung.
 - Fällt die Verbindung weg (Handy gesperrt, Funkloch), verbindet sich die App automatisch wieder und landet im selben Spiel.
