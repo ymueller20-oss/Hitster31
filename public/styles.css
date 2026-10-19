@@ -186,6 +186,13 @@ select { width: auto; }
   background: linear-gradient(transparent, var(--bg) 35%);
 }
 
+/* ---------- YouTube-Player (liegt außerhalb von #app, damit er beim Neu-Rendern nicht neu lädt) ---------- */
+
+#yt-wrap { display: none; max-width: 520px; margin: 0 auto; padding: calc(8px + var(--safe-t)) 16px 0; }
+body.yt-on #yt-wrap { display: block; }
+body.yt-on main { padding-top: 10px; }
+#yt-wrap iframe { width: 100%; height: 200px; border: 0; border-radius: 12px; display: block; background: #000; }
+
 /* ---------- Spiel ---------- */
 
 .scores { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px 4px; scrollbar-width: none; }

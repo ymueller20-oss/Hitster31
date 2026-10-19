@@ -59,6 +59,75 @@ const S = {
   },
 };
 
+// ---------- YouTube ----------
+const yt = { player: null, ready: null, videoId: null, checkTimer: null, failedId: null };
+
+function loadYouTubeApi() {
+  if (!yt.ready) {
+    yt.ready = new Promise((resolve) => {
+      window.onYouTubeIframeAPIReady = resolve;
+      const s = document.createElement('script');
+      s.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(s);
+    });
+  }
+  return yt.ready;
+}
+
+async function playYoutube(videoId) {
+  yt.videoId = videoId;
+  S.audio.blocked = false;
+  await loadYouTubeApi();
+  if (yt.videoId !== videoId) return;
+  if (!yt.player) {
+    yt.player = new YT.Player('yt-player', {
+      height: '200',
+      width: '100%',
+      videoId,
+      playerVars: { autoplay: 1, playsinline: 1, rel: 0, start: 0 },
+      events: {
+        onReady: (e) => e.target.playVideo(),
+        // Video gesperrt/gelöscht/nicht einbettbar -> auf die Hörprobe ausweichen.
+        onError: () => {
+          yt.failedId = yt.videoId;
+          stopYoutube();
+          S.audio.blocked = false;
+          syncAudio();
+          render();
+        },
+        onStateChange: (e) => {
+          if (e.data === YT.PlayerState.ENDED) {
+            e.target.seekTo(0);
+            e.target.playVideo();
+          }
+          S.audio.playing = e.data === YT.PlayerState.PLAYING;
+          if (S.audio.playing) S.audio.blocked = false;
+          render();
+        },
+      },
+    });
+  } else {
+    yt.player.loadVideoById({ videoId, startSeconds: 0 });
+  }
+  // Startet nichts (Autoplay-Sperre des Browsers)? Dann großen Play-Knopf anbieten.
+  clearTimeout(yt.checkTimer);
+  yt.checkTimer = setTimeout(() => {
+    const st = yt.player?.getPlayerState?.();
+    if (yt.videoId === videoId && st !== YT.PlayerState.PLAYING && st !== YT.PlayerState.BUFFERING) {
+      S.audio.blocked = true;
+      render();
+    }
+  }, 3000);
+}
+
+function stopYoutube() {
+  clearTimeout(yt.checkTimer);
+  yt.videoId = null;
+  try {
+    yt.player?.stopVideo?.();
+  } catch {}
+}
+
 // Ein einziges Audio-Element außerhalb von #app, damit es das Neu-Rendern überlebt.
 const audioEl = new Audio();
 audioEl.loop = true;
@@ -234,7 +303,16 @@ function syncAudio() {
   const g = S.game;
   const r = g?.round;
   const running = g && r && ['placing', 'challenge', 'reveal'].includes(g.phase);
-  const mode = audioMode();
+  let mode = audioMode();
+  // Kein YouTube-Video gefunden oder Tageslimit erreicht -> Hörprobe als Ersatz.
+  if (mode === 'youtube' && r && ((!r.youtubeId && (r.yt === 'missing' || r.yt === 'quota')) || r.youtubeId === yt.failedId)) {
+    mode = 'preview';
+  }
+
+  const ytOn = mode === 'youtube' && running;
+  document.body.classList.toggle('yt-on', ytOn);
+  if (ytOn && r.youtubeId && yt.videoId !== r.youtubeId) playYoutube(r.youtubeId);
+  else if (!ytOn && yt.videoId) stopYoutube();
 
   if (mode === 'preview' && running && r.audioUrl) {
     if (S.audio.src !== r.audioUrl) {
@@ -271,7 +349,9 @@ function stopPreview() {
 
 // Jeder Tipp im Spiel darf eine blockierte Wiedergabe nachholen (iOS/Chrome-Autoplay-Regeln).
 document.addEventListener('click', () => {
-  if (S.audio.src && audioEl.paused && S.audio.blocked) playPreview();
+  if (!S.audio.blocked) return;
+  if (S.audio.src && audioEl.paused) playPreview();
+  if (yt.videoId) yt.player?.playVideo?.();
 }, true);
 
 async function playCurrent() {
@@ -526,16 +606,23 @@ const actions = {
     send({ type: 'start' });
   },
   replay() {
-    if (audioMode() === 'preview') {
+    if (yt.videoId) {
+      yt.player?.seekTo?.(0);
+      yt.player?.playVideo?.();
+    } else if (S.audio.src) {
       audioEl.currentTime = 0;
       playPreview();
     } else playCurrent();
   },
   pause() {
-    if (audioMode() === 'preview') audioEl.pause();
+    if (yt.videoId) yt.player?.pauseVideo?.();
+    else if (S.audio.src) audioEl.pause();
     else pausePlayback();
   },
-  playPreview,
+  playPreview() {
+    if (yt.videoId) yt.player?.playVideo?.();
+    else playPreview();
+  },
   setAudio(el) {
     const mode = el.dataset.mode;
     const before = audioMode();
@@ -794,7 +881,8 @@ function viewHostSetup() {
 }
 
 const AUDIO_OPTIONS = [
-  ['preview', '🎧', 'Hörprobe auf diesem Handy', '30 Sekunden pro Song, ohne Konto – ideal für Online-Spiele'],
+  ['youtube', '▶️', 'Ganzer Song über YouTube', 'Kostenlos, ohne Konto, ab 0:00 – das Video ist sichtbar, also nicht hinschauen 😉'],
+  ['preview', '🎧', 'Hörprobe auf diesem Handy', '30 Sekunden aus der Songmitte, ohne Konto'],
   ['spotify', '🟢', 'Ganzer Song (eigenes Spotify)', 'Braucht Premium und Freischaltung durch den Host'],
   ['off', '🔇', 'Kein Ton', 'Ich sitze neben jemandem, bei dem die Musik läuft'],
 ];
@@ -803,7 +891,7 @@ function viewAudioCard(prefix = '') {
   const mode = audioMode();
   return `<section class="card">
     <h2>${prefix}Wie hörst du die Musik?</h2>
-    <div class="devices">${AUDIO_OPTIONS.map(
+    <div class="devices">${AUDIO_OPTIONS.filter(([m]) => m !== 'youtube' || S.config.youtube).map(
       ([m, icon, label, hint]) => `<button class="pl ${mode === m ? 'on' : ''}" data-action="setAudio" data-mode="${m}">
         <span class="pl-ph">${icon}</span><span class="grow"><span class="pl-name">${label}</span><span class="muted small">${hint}</span></span>
         <span class="check">${mode === m ? '✓' : ''}</span></button>`,
@@ -893,7 +981,7 @@ function viewPlayersSheet() {
     <button class="btn primary wide" data-action="share">📨 Weitere Freunde einladen</button>
     <ul class="players">${g.players
       .map(
-        (p) => `<li><span class="avatar" style="--h:${hue(p.name)}">${esc(p.name[0].toUpperCase())}</span><span class="grow">${esc(p.name)} <span class="small">${{ preview: '🎧', spotify: '🟢', off: '🔇' }[p.audioMode] || ''}</span> ${p.connected ? '' : '<span class="muted small">offline</span>'}</span>
+        (p) => `<li><span class="avatar" style="--h:${hue(p.name)}">${esc(p.name[0].toUpperCase())}</span><span class="grow">${esc(p.name)} <span class="small">${{ youtube: '▶️', preview: '🎧', spotify: '🟢', off: '🔇' }[p.audioMode] || ''}</span> ${p.connected ? '' : '<span class="muted small">offline</span>'}</span>
         ${isHost() && p.id !== g.you ? `<button class="icon-btn" data-action="kick" data-id="${p.id}">✕</button>` : ''}</li>`,
       )
       .join('')}</ul>
@@ -913,17 +1001,36 @@ function viewAudioBar() {
       <button class="btn ghost small" data-action="togglePlayers">Ändern</button></div>`;
   }
   if (mode === 'spotify') return viewSpotifyBar();
+  const ytFailed = r.youtubeId && r.youtubeId === yt.failedId;
+  if (mode === 'youtube' && !ytFailed && (r.youtubeId || r.yt === 'loading' || !r.yt)) {
+    if (S.audio.blocked) return `<button class="btn primary wide big" data-action="playPreview">▶ Tippen zum Abspielen</button>`;
+    return `<div class="hostbar"><span class="grow small">${
+      r.youtubeId ? (S.audio.playing ? '▶️ Song läuft (YouTube)' : '▶️ Song pausiert') : '⏳ Suche Song auf YouTube…'
+    }</span>
+      ${r.youtubeId ? `<button class="icon-btn" data-action="replay" aria-label="Von vorn">⏮</button>
+      <button class="icon-btn" data-action="${S.audio.playing ? 'pause' : 'playPreview'}" aria-label="Play/Pause">${S.audio.playing ? '⏸' : '▶'}</button>` : ''}
+      <button class="icon-btn" data-action="togglePlayers" aria-label="Ton-Einstellungen">⚙️</button></div>`;
+  }
+  const fallback =
+    mode === 'youtube'
+      ? ytFailed
+        ? 'Video hier nicht abspielbar – '
+        : r.yt === 'quota'
+          ? 'YouTube-Tageslimit erreicht – '
+          : 'Nicht auf YouTube gefunden – '
+      : '';
   if (S.audio.blocked && S.audio.src) {
     return `<button class="btn primary wide big" data-action="playPreview">▶ Tippen zum Abspielen</button>`;
   }
   const status =
-    r.audio === 'ready'
+    fallback +
+    (r.audio === 'ready'
       ? S.audio.playing
         ? '🎧 Hörprobe läuft'
         : '🎧 Hörprobe pausiert'
       : r.audio === 'missing'
         ? '⚠️ Für diesen Song gibt es keine Hörprobe'
-        : '⏳ Hörprobe lädt…';
+        : '⏳ Hörprobe lädt…');
   return `<div class="hostbar ${r.audio === 'missing' ? 'err' : ''}">
     <span class="grow small">${status}</span>
     ${r.audio === 'ready' ? `<button class="icon-btn" data-action="replay" aria-label="Von vorn">⏮</button>

@@ -22,9 +22,12 @@ Jeder wählt auf seinem Handy, wie er die Musik hört („Wie hörst du die Musi
 
 | Modus | Was passiert | Voraussetzung |
 | --- | --- | --- |
-| 🎧 **Hörprobe** (Standard für Mitspieler) | 30-Sekunden-Ausschnitt in Dauerschleife, direkt im Browser | nichts – kein Konto |
+| ▶️ **YouTube** (Standard für Mitspieler, wenn eingerichtet) | ganzer Song ab 0:00 über ein eingebettetes YouTube-Video – das Video ist sichtbar | nichts – kein Konto; Server braucht `YOUTUBE_API_KEY` |
+| 🎧 **Hörprobe** | 30-Sekunden-Ausschnitt in Dauerschleife, direkt im Browser | nichts – kein Konto |
 | 🟢 **Eigenes Spotify** (Standard für Host) | ganzer Song über das eigene Spotify (Handy, Box, TV) | Spotify Premium + im Spotify-Dashboard unter *User Management* eingetragen (max. 5) |
 | 🔇 **Kein Ton** | still | man sitzt neben jemandem, bei dem die Musik läuft |
+
+**YouTube einrichten:** In der [Google Cloud Console](https://console.cloud.google.com/) ein Projekt anlegen, „YouTube Data API v3“ aktivieren, unter *Anmeldedaten* einen API-Schlüssel erstellen und als `YOUTUBE_API_KEY` auf dem Server setzen. Das kostenlose Kontingent reicht für ca. 100 neue Songs pro Tag; gefundene Videos werden zwischengespeichert. Findet sich kein Video, ist es nicht abspielbar oder ist das Tageslimit erreicht, läuft automatisch die Hörprobe.
 
 Die Hörproben kommen von der öffentlichen Deezer-API und werden über den Hit31-Server ausgeliefert, damit niemand am Link den Titel erkennt. Gibt es zu einem Song keine Hörprobe und braucht jemand eine, wird automatisch ein anderer Song gezogen.
 

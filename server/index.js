@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Game, GameError } from './game.js';
 import { loadPreview } from './audio.js';
+import { findVideo, youtubeEnabled, QuotaError } from './youtube.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
@@ -26,7 +27,7 @@ async function serveStatic(req, res) {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/config.json') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    return res.end(JSON.stringify({ spotifyClientId: process.env.SPOTIFY_CLIENT_ID || '' }));
+    return res.end(JSON.stringify({ spotifyClientId: process.env.SPOTIFY_CLIENT_ID || '', youtube: youtubeEnabled }));
   }
   const audio = url.pathname.match(/^\/audio\/([A-Z]{4})\/([0-9a-f-]{36})$/);
   if (audio) return serveAudio(req, res, audio[1], audio[2]);
@@ -115,6 +116,7 @@ function broadcast(code) {
   if (!game || !set) return;
   syncTimer(game);
   ensureAudio(game);
+  ensureYoutube(game);
   for (const ws of set) {
     if (ws.playerId && game.players.has(ws.playerId)) send(ws, { type: 'state', state: game.viewFor(ws.playerId) });
   }
@@ -161,6 +163,33 @@ function ensureAudio(game) {
   if (next) loadPreview(next);
 }
 
+// YouTube-Video nur suchen, wenn es jemand braucht (die Suche verbraucht Tageskontingent).
+function ensureYoutube(game) {
+  const r = game.round;
+  if (!youtubeEnabled || !r || game.phase !== 'placing' || r.yt || !game.usesMode('youtube')) return;
+  r.yt = 'loading';
+  const { code } = game;
+  const roundId = r.id;
+  findVideo(r.card)
+    .then((id) => {
+      if (rooms.get(code) !== game || game.round?.id !== roundId) return;
+      r.ytId = id;
+      r.yt = id ? 'ready' : 'missing';
+      if (!id && r.audioMisses < MAX_AUDIO_MISSES) game.replaceCard(roundId);
+      else if (id) {
+        const next = game.deck[game.deck.length - 1];
+        if (next) findVideo(next).catch(() => {});
+      }
+      broadcast(code);
+    })
+    .catch((e) => {
+      if (rooms.get(code) !== game || game.round?.id !== roundId) return;
+      if (!(e instanceof QuotaError)) console.warn('YouTube-Suche fehlgeschlagen:', e.message);
+      r.yt = e instanceof QuotaError ? 'quota' : 'missing';
+      broadcast(code);
+    });
+}
+
 function attach(ws, game, player) {
   detach(ws);
   ws.playerId = player.id;
@@ -197,19 +226,25 @@ function closeRoom(code, reason) {
   audioByRoom.delete(code);
 }
 
+// Mitspieler hören standardmäßig den ganzen Song über YouTube, wenn der Server das kann.
+function withDefaultAudio(p) {
+  if (youtubeEnabled && p.audioMode === 'preview') p.audioMode = 'youtube';
+  return p;
+}
+
 function handle(ws, msg) {
   const { type } = msg;
   if (type === 'create') {
     const game = new Game(newCode());
     rooms.set(game.code, game);
-    attach(ws, game, game.addPlayer(msg.name));
+    attach(ws, game, withDefaultAudio(game.addPlayer(msg.name)));
     return broadcast(game.code);
   }
   if (type === 'join') {
     const code = String(msg.code || '').toUpperCase().trim();
     const game = rooms.get(code);
     if (!game) throw new GameError('Raum nicht gefunden. Stimmt der Code?');
-    attach(ws, game, game.addPlayer(msg.name));
+    attach(ws, game, withDefaultAudio(game.addPlayer(msg.name)));
     return broadcast(code);
   }
   if (type === 'resume') {
@@ -250,7 +285,10 @@ function handle(ws, msg) {
     case 'lobby': game.backToLobby(id); break;
     case 'slot': game.selectSlot(id, msg.slot); break;
     case 'guess': game.setGuess(id, msg.guess); return; // privat, kein Broadcast nötig
-    case 'audio': game.setAudioMode(id, msg.mode); break;
+    case 'audio':
+      if (msg.mode === 'youtube' && !youtubeEnabled) throw new GameError('YouTube ist auf diesem Server noch nicht eingerichtet.');
+      game.setAudioMode(id, msg.mode);
+      break;
     case 'lockIn': game.lockIn(id); break;
     case 'skip': game.skipSong(id); break;
     case 'buy': game.buyCard(id); break;

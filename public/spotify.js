@@ -218,7 +218,7 @@ export async function devices() {
 }
 
 export async function play(uri, deviceId) {
-  await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId || undefined }, body: { uris: [uri] } });
+  await api('/me/player/play', { method: 'PUT', query: { device_id: deviceId || undefined }, body: { uris: [uri], position_ms: 0 } });
 }
 
 export async function pause(deviceId) {

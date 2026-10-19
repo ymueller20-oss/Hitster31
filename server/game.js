@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS = {
   buyCost: 3,
 };
 
-export const AUDIO_MODES = ['spotify', 'preview', 'off'];
+export const AUDIO_MODES = ['spotify', 'youtube', 'preview', 'off'];
 
 export class GameError extends Error {}
 
@@ -151,9 +151,13 @@ export class Game {
     this.player(id).audioMode = mode;
   }
 
-  // Braucht gerade jemand eine Hörprobe?
+  // Nutzt gerade jemand (verbunden) diesen Ton-Modus?
+  usesMode(mode) {
+    return [...this.players.values()].some((p) => p.connected && p.audioMode === mode);
+  }
+
   needsPreview() {
-    return [...this.players.values()].some((p) => p.connected && p.audioMode === 'preview');
+    return this.usesMode('preview');
   }
 
   // Für den aktuellen Song gibt es keine Hörprobe -> anderen Song ziehen (gleicher Spieler).
@@ -256,7 +260,9 @@ export class Game {
       passes: [],
       deadline: null,
       result: null,
-      audio: null, // null | 'loading' | 'ready' | 'missing'
+      audio: null, // Hörprobe: null | 'loading' | 'ready' | 'missing'
+      yt: null, // YouTube: null | 'loading' | 'ready' | 'missing' | 'quota'
+      ytId: null,
       audioMisses: 0,
     };
   }
@@ -448,8 +454,10 @@ export class Game {
         result: r.result,
         audio: r.audio,
         audioUrl: r.audio === 'ready' ? `/audio/${this.code}/${r.id}` : null,
+        yt: r.yt,
       },
     };
+    if (r && this.players.get(id)?.audioMode === 'youtube') view.round.youtubeId = r.ytId;
     // Die Spotify-URI bekommt nur, wer über sein eigenes Spotify hört – ohne Titel/Jahr.
     if (r && this.players.get(id)?.audioMode === 'spotify') view.playUri = r.card.uri;
     return view;
