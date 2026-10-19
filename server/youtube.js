@@ -47,7 +47,7 @@ function score(item, card) {
   if (!nCard || !(nTitle.includes(nCard) || similar(title, card.title))) return -1;
   if (BAD.test(title) && !BAD.test(card.title)) return -1;
   const artists = card.artists?.length ? card.artists : [card.artist];
-  const artistInChannel = artists.some((a) => similar(channel.replace(/\s*-\s*Topic$|VEVO$/i, ''), a));
+  const artistInChannel = artists.some((a) => similar(channel.replace(/\s*-\s*Topic$|VEVO$|\s*official$/i, ''), a));
   const artistInTitle = artists.some((a) => nTitle.includes(normalize(a)));
   if (!artistInChannel && !artistInTitle) return -1;
   let s = 1;
