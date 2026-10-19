@@ -11,9 +11,9 @@ Die Musik kommt aus deinem Spotify, deine Freunde machen per Code oder Link mit 
 3. **Freunde einladen**: über *Freunde einladen* / WhatsApp den Link schicken oder den 4-stelligen Code sagen. Sie öffnen den Link im Handy-Browser, geben ihren Namen ein – fertig.
 4. Spielen:
    - Jeder startet mit einer aufgedeckten Karte.
-   - Wer dran ist, hört den Song und tippt auf die Lücke im Zeitstrahl, wo er hingehört (älter oben, neuer unten). Bonus: Titel **und** Interpret richtig tippen → +1 🪙.
-   - Danach dürfen alle anderen mit 1 🪙 **challengen** (andere Lücke wählen). Liegt der Spieler falsch und der Challenger richtig, bekommt der Challenger die Karte.
-   - Mit Tokens: Song überspringen (1 🪙) oder Karte kaufen (3 🪙).
+   - Wer dran ist, hört den Song und tippt auf die Lücke im Zeitstrahl, wo er hingehört (älter oben, neuer unten). Bonus: Titel **und** Interpret richtig tippen → +1 🪙 Chip.
+   - Danach dürfen alle anderen ihren 🪙 **Chip** an die Stelle legen, wo der Song ihrer Meinung nach hingehört (Karte klauen). Liegt der Spieler falsch und dein Chip richtig, klaust du die Karte.
+   - Mit Chips: Song überspringen (1 🪙) oder Karte kaufen (3 🪙).
    - Wer zuerst die Ziel-Anzahl Karten hat (Standard 10), gewinnt.
 
 ### Online spielen (jeder an einem anderen Ort)

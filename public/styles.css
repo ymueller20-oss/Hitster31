@@ -279,7 +279,7 @@ body.yt-on main { padding-top: 10px; }
 .actions {
   position: sticky; bottom: 0; z-index: 5; display: flex; flex-direction: column; gap: 8px;
   padding: 12px 0 calc(8px + var(--safe-b)); margin-top: auto;
-  background: linear-gradient(transparent, var(--bg) 22%);
+  background: linear-gradient(transparent, var(--bg) 14px);
 }
 .actions p { margin: 0; }
 .guess-toggle { appearance: none; background: none; border: 0; color: var(--muted); font: inherit; text-align: left; padding: 4px 0; }

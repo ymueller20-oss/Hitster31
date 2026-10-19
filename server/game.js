@@ -300,7 +300,7 @@ export class Game {
   skipSong(id) {
     this.requireActive(id, 'placing');
     const p = this.player(id);
-    if (p.tokens < 1) fail('Du hast keine Tokens.');
+    if (p.tokens < 1) fail('Du hast keine Chips.');
     p.tokens--;
     this.startRound();
     this.touch();
@@ -309,7 +309,7 @@ export class Game {
   buyCard(id) {
     this.requireActive(id, 'placing');
     const p = this.player(id);
-    if (p.tokens < this.settings.buyCost) fail(`Du brauchst ${this.settings.buyCost} Tokens.`);
+    if (p.tokens < this.settings.buyCost) fail(`Du brauchst ${this.settings.buyCost} Chips.`);
     p.tokens -= this.settings.buyCost;
     insertSorted(p.timeline, this.round.card);
     this.reveal({ kind: 'bought', winnerId: id, activeCorrect: true, guessCorrect: false });
@@ -325,12 +325,12 @@ export class Game {
   }
 
   challenge(id, slot) {
-    if (this.phase !== 'challenge') fail('Gerade kann nicht gechallenged werden.');
-    if (id === this.round.playerId) fail('Du kannst dich nicht selbst challengen.');
+    if (this.phase !== 'challenge') fail('Gerade kannst du keinen Chip setzen.');
+    if (id === this.round.playerId) fail('Auf deine eigene Karte kannst du keinen Chip setzen.');
     const p = this.player(id);
     const r = this.round;
     if (r.challenges.some((c) => c.playerId === id) || r.passes.includes(id)) fail('Du hast schon entschieden.');
-    if (p.tokens < 1) fail('Du hast keine Tokens.');
+    if (p.tokens < 1) fail('Du hast keine Chips.');
     const tl = this.player(r.playerId).timeline;
     if (!Number.isInteger(slot) || slot < 0 || slot > tl.length) fail('Ungültige Position.');
     if (slot === r.slot || r.challenges.some((c) => c.slot === slot)) fail('Diese Position ist schon belegt.');

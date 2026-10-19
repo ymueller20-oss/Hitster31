@@ -579,15 +579,15 @@ const actions = {
     send({ type: 'lockIn' });
   },
   skip() {
-    if (confirm('Song überspringen? Kostet 1 Token.')) send({ type: 'skip' });
+    if (confirm('Song überspringen? Kostet 1 Chip.')) send({ type: 'skip' });
   },
   buy() {
-    if (confirm(`Karte kaufen? Kostet ${S.game.settings.buyCost} Tokens – sie wird automatisch richtig einsortiert.`)) {
+    if (confirm(`Karte kaufen? Kostet ${S.game.settings.buyCost} Chips – sie wird automatisch richtig einsortiert.`)) {
       send({ type: 'buy' });
     }
   },
   challenge() {
-    if (S.ui.challengeSlot === null) return showToast('Tippe zuerst eine Stelle in der Zeitleiste an.');
+    if (S.ui.challengeSlot === null) return showToast('Tippe zuerst die Lücke an, wo der Song deiner Meinung nach hingehört.');
     send({ type: 'challenge', slot: S.ui.challengeSlot });
   },
   pass() {
@@ -775,9 +775,9 @@ function rulesHtml() {
   return `<ol>
     <li>Jeder startet mit einer aufgedeckten Song-Karte (mit Jahr) in seinem Zeitstrahl.</li>
     <li>Wer dran ist, hört einen Song und legt ihn an die passende Stelle im eigenen Zeitstrahl – älter oben, neuer unten.</li>
-    <li>Bonus: Titel <i>und</i> Interpret richtig getippt → +1 🪙 Token.</li>
-    <li>Die anderen dürfen mit 1 🪙 <b>challengen</b> und eine andere Stelle wählen. Lag der Spieler falsch und du richtig, bekommst du die Karte.</li>
-    <li>Mit Tokens kannst du auch einen Song überspringen (1 🪙) oder eine Karte kaufen (3 🪙).</li>
+    <li>Bonus: Titel <i>und</i> Interpret richtig getippt → +1 🪙 Chip.</li>
+    <li><b>Karte klauen:</b> Liegt jemand deiner Meinung nach falsch, legst du deinen 🪙 Chip an die richtige Stelle in <i>seinem</i> Zeitstrahl. Hast du recht, klaust du die Karte – sie kommt in deinen Zeitstrahl. Der Chip ist so oder so weg.</li>
+    <li>Mit Chips kannst du auch einen Song überspringen (1 🪙) oder eine Karte kaufen (3 🪙).</li>
     <li>Wer zuerst die Ziel-Anzahl an Karten hat, gewinnt!</li>
   </ol>`;
 }
@@ -873,8 +873,8 @@ function viewHostSetup() {
     <section class="card">
       <h2>3 · Einstellungen</h2>
       <label class="setting">Karten zum Sieg ${select('targetCards', [5, 7, 10, 12, 15], g.settings.targetCards)}</label>
-      <label class="setting">Start-Tokens ${select('startTokens', [0, 1, 2, 3, 4, 5], g.settings.startTokens)}</label>
-      <label class="setting">Zeit zum Challengen ${select('challengeSeconds', [10, 15, 20, 30, 45], g.settings.challengeSeconds, ' s')}</label>
+      <label class="setting">Start-Chips ${select('startTokens', [0, 1, 2, 3, 4, 5], g.settings.startTokens)}</label>
+      <label class="setting">Zeit zum Chip-Setzen ${select('challengeSeconds', [10, 15, 20, 30, 45], g.settings.challengeSeconds, ' s')}</label>
     </section>
     <div class="sticky-bottom"><button class="btn primary wide big" data-action="start" ${canStart ? '' : 'disabled'}>Spiel starten ▶</button></div>
     <p class="center small"><button class="link" data-action="spotifyLogout">Spotify-Konto wechseln</button></p>`;
@@ -1064,11 +1064,11 @@ function viewStatus(active) {
   if (g.phase === 'placing') {
     return mine
       ? `<div class="status you"><div class="eq"><i></i><i></i><i></i><i></i></div><div><b>Du bist dran!</b><br><span class="small">Wo gehört der Song hin? Tippe auf eine Lücke.</span></div></div>`
-      : `<div class="status"><div class="eq"><i></i><i></i><i></i><i></i></div><div><b>${name}</b> ordnet den Song ein…<br><span class="small muted">Denk schon mal mit – gleich darfst du challengen.</span></div></div>`;
+      : `<div class="status"><div class="eq"><i></i><i></i><i></i><i></i></div><div><b>${name}</b> ordnet den Song ein…<br><span class="small muted">Denk mit – liegt ${name} falsch, kannst du gleich deinen 🪙 Chip setzen und die Karte klauen.</span></div></div>`;
   }
   if (g.phase === 'challenge') {
-    return `<div class="status challenge"><span class="timer" data-countdown></span><div><b>Challenge-Zeit!</b><br><span class="small">${
-      mine ? 'Die anderen überlegen, ob du falsch liegst…' : `Glaubst du, ${name} liegt falsch?`
+    return `<div class="status challenge"><span class="timer" data-countdown></span><div><b>🪙 Chip setzen &amp; Karte klauen!</b><br><span class="small">${
+      mine ? 'Die anderen können jetzt ihren Chip in deinen Zeitstrahl legen…' : `Liegt ${name} falsch? Leg deinen Chip an die richtige Stelle!`
     }</span></div></div>`;
   }
   if (g.phase === 'reveal') return viewReveal(active);
@@ -1085,13 +1085,13 @@ function viewReveal(active) {
   else if (res.activeCorrect) text = r.playerId === g.you ? '🎉 Richtig! Die Karte gehört dir.' : `🎉 ${esc(active.name)} lag richtig!`;
   else if (res.winnerId) {
     const w = playerById(res.winnerId);
-    text = res.winnerId === g.you ? '🔥 Challenge gewonnen! Die Karte gehört dir.' : `😬 Falsch – ${esc(w?.name)} schnappt sich die Karte!`;
+    text = res.winnerId === g.you ? '🔥 Karte geklaut! Dein Chip lag richtig.' : `😬 Falsch – ${esc(w?.name)} klaut die Karte mit dem Chip!`;
   } else text = '❌ Leider falsch – die Karte fliegt raus.';
   const guess =
     res.guessCorrect
       ? `<p class="ok small">+1 🪙 für Titel & Interpret!</p>`
       : r.guess?.title || r.guess?.artist
-        ? `<p class="muted small">Getippt: „${esc(r.guess.title)}“ von ${esc(r.guess.artist)} – kein Token.</p>`
+        ? `<p class="muted small">Getippt: „${esc(r.guess.title)}“ von ${esc(r.guess.artist)} – kein Chip.</p>`
         : '';
   return `<div class="reveal">
     ${songCard(c, 'big')}
@@ -1134,7 +1134,7 @@ function viewTimeline(p) {
       return `<div class="slot chosen" ${placing ? `data-action="slot" data-slot="${i}"` : ''}>${mysteryCard(playerById(r.playerId))}</div>`;
     }
     const chips = taken
-      .map((c) => `<span class="chip" style="--h:${hue(playerById(c.playerId)?.name)}">⚔️ ${esc(playerById(c.playerId)?.name)}</span>`)
+      .map((c) => `<span class="chip" style="--h:${hue(playerById(c.playerId)?.name)}">🪙 ${esc(playerById(c.playerId)?.name)}</span>`)
       .join('');
     if (placing || (canChallenge && !taken.length)) {
       const sel = canChallenge && S.ui.challengeSlot === i;
@@ -1169,7 +1169,7 @@ function timelineCard(c, highlight) {
 
 function mysteryCard(p, challenge = false) {
   return `<div class="mystery ${challenge ? 'ch' : ''}"><div class="eq"><i></i><i></i><i></i><i></i></div><span>${
-    challenge ? 'Deine Challenge' : p?.id === S.game.you ? 'Dein Tipp' : `Tipp von ${esc(p?.name)}`
+    challenge ? 'Dein Chip' : p?.id === S.game.you ? 'Dein Tipp' : `Tipp von ${esc(p?.name)}`
   }</span><b>?</b></div>`;
 }
 
@@ -1196,11 +1196,11 @@ function viewActions(active) {
   if (g.phase === 'challenge' && !mine) {
     const decided = r.challenges.some((c) => c.playerId === g.you) || r.passes.includes(g.you);
     if (decided) return `<div class="actions"><p class="center muted">Warte auf die anderen… <span data-countdown></span></p></div>`;
-    if (my.tokens < 1) return `<div class="actions"><p class="center muted">Keine Tokens – du schaust diesmal zu.</p></div>`;
+    if (my.tokens < 1) return `<div class="actions"><p class="center muted">Keine Chips mehr – du schaust diesmal zu.</p></div>`;
     return `<div class="actions">
-      <p class="small center">Tippe eine <b>andere</b> Lücke an, um zu challengen (kostet 1 🪙).</p>
+      <p class="small center">Tippe in ${esc(active?.name)}s Zeitstrahl die Lücke an, wo der Song <b>wirklich</b> hingehört (kostet 1 🪙).</p>
       <div class="row"><button class="btn ghost grow" data-action="pass">Passen</button>
-      <button class="btn danger grow" data-action="challenge" ${S.ui.challengeSlot === null ? 'disabled' : ''}>⚔️ Challenge!</button></div></div>`;
+      <button class="btn danger grow" data-action="challenge" ${S.ui.challengeSlot === null ? 'disabled' : ''}>🪙 Chip setzen</button></div></div>`;
   }
   if (g.phase === 'reveal') {
     const can = mine || isHost();
