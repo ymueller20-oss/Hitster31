@@ -130,7 +130,12 @@ async function api(path, { method = 'GET', body, query } = {}) {
     }
     if (res.status === 204 || res.status === 202) return null;
     const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      // Manche Endpunkte (z. B. Play) antworten mit Klartext statt JSON.
+    }
     if (!res.ok) throw new SpotifyError(res.status, data?.error?.message || 'Spotify-Fehler ' + res.status, data?.error?.reason);
     return data;
   }
