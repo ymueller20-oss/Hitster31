@@ -1,0 +1,19 @@
+{
+  "name": "hit31",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Musik-Zeitstrahl-Partyspiel fürs Handy mit Spotify – Freunde per Code einladen.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
