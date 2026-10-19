@@ -881,7 +881,7 @@ function viewHostSetup() {
 }
 
 const AUDIO_OPTIONS = [
-  ['youtube', '▶️', 'Ganzer Song über YouTube', 'Kostenlos, ohne Konto, ab 0:00 – das Video ist sichtbar, also nicht hinschauen 😉'],
+  ['youtube', '▶️', 'Ganzer Song über YouTube', 'Kostenlos, ohne Konto, von Anfang an'],
   ['preview', '🎧', 'Hörprobe auf diesem Handy', '30 Sekunden aus der Songmitte, ohne Konto'],
   ['spotify', '🟢', 'Ganzer Song (eigenes Spotify)', 'Braucht Premium und Freischaltung durch den Host'],
   ['off', '🔇', 'Kein Ton', 'Ich sitze neben jemandem, bei dem die Musik läuft'],

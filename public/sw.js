@@ -1,6 +1,6 @@
 // Minimaler Service Worker: App-Shell offline verfügbar machen (Installierbarkeit),
 // alles andere (WebSocket, Spotify-API) geht direkt ins Netz.
-const CACHE = 'hit31-v4';
+const CACHE = 'hit31-v5';
 const SHELL = ['/', '/app.js', '/spotify.js', '/styles.css', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {

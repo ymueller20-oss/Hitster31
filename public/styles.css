@@ -188,8 +188,17 @@ select { width: auto; }
 
 /* ---------- YouTube-Player (liegt außerhalb von #app, damit er beim Neu-Rendern nicht neu lädt) ---------- */
 
-#yt-wrap { display: none; max-width: 520px; margin: 0 auto; padding: calc(8px + var(--safe-t)) 16px 0; }
-body.yt-on #yt-wrap { display: block; }
+#yt-wrap { display: none; position: relative; max-width: 520px; margin: 0 auto; padding: calc(8px + var(--safe-t)) 16px 0; }
+#yt-cover {
+  position: absolute; top: calc(8px + var(--safe-t)); left: 16px; right: 16px; height: 200px; border-radius: 12px;
+  background: linear-gradient(120deg, var(--primary), var(--primary2) 60%, #7a3dff);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  color: #fff; pointer-events: none; text-align: center; padding: 12px;
+}
+#yt-cover b { font-size: 4rem; line-height: 1; font-weight: 900; }
+#yt-cover span { font-size: .85rem; opacity: .9; }
+#yt-cover .eq { height: 28px; }
+body.yt-on #yt-wrap { display: block; min-height: calc(208px + var(--safe-t)); }
 body.yt-on main { padding-top: 10px; }
 #yt-wrap iframe { width: 100%; height: 200px; border: 0; border-radius: 12px; display: block; background: #000; }
 

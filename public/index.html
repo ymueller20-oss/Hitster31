@@ -16,7 +16,10 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div id="yt-wrap" aria-label="YouTube-Player"><div id="yt-player"></div></div>
+  <div id="yt-wrap" aria-label="YouTube-Player"><div id="yt-player"></div>
+    <!-- Deckt das Video ab, damit niemand Titel/Cover sieht. Tipps gehen durch zum Player (Play/Pause). -->
+    <div id="yt-cover" aria-hidden="true"><div class="eq"><i></i><i></i><i></i><i></i></div><b>?</b><span>Wer singt das? Tippen = Play/Pause</span></div>
+  </div>
   <div id="app"><main class="center"><span class="logo">Hit<b>31</b></span></main></div>
   <noscript>Bitte JavaScript aktivieren.</noscript>
   <script type="module" src="/app.js"></script>
